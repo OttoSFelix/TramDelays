@@ -1,0 +1,6 @@
+services:
+    scraper:
+      image: data_scraper
+      container_name: scraper
+      volumes:
+        - ./data_scraping/tram_data.db:/app/tram_data.db
