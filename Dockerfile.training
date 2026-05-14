@@ -1,0 +1,9 @@
+FROM python:alpine3.22
+
+WORKDIR /app
+
+COPY neuralnet.py requirements.txt .
+
+RUN pip install -r requirements.txt
+
+CMD ["python3", "neuralnet.py"]

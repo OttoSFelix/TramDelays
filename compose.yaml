@@ -2,5 +2,11 @@ services:
     scraper:
       image: data_scraper
       container_name: scraper
+      build: .
       volumes:
         - ./data_scraping/tram_data.db:/app/tram_data.db
+    trainer:
+      image: nn_trainer
+      container_name: trainer
+      context: .
+      dockerfile: Dockerfile.training
