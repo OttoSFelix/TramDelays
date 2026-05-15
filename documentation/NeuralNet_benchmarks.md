@@ -76,5 +76,5 @@ model = nn.Sequential(
 )
 `
 
-lr=0.01, epochs=300, batch_size=128
+lr=0.01, epochs=3000, batch_size=128
 *Accuracy* **82.7%**
