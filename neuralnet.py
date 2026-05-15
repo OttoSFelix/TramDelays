@@ -4,57 +4,76 @@ import torch.optim as optim
 from skorch import NeuralNet
 from sklearn.datasets import fetch_openml
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 import numpy as np
 import matplotlib.pyplot as plt
 from termcolor import colored
 import sqlite3
-db_conn = sqlite3.connect('tram_data.db', check_same_thread=False)
+import math
+db_conn = sqlite3.connect('bus_data.db', check_same_thread=False)
 cursor = db_conn.cursor()
 
 # here data is taken from the SQLite database
-X_data = cursor.execute("SELECT * FROM vehicle_locations WHERE datatype = 'VP';").fetchall()
-y_data = cursor.execute("SELECT time FROM vehicle_locations WHERE datatype = 'ARS' OR datatype = 'PAS';").fetchall()
 
-X = torch.tensor([[n[2], n[3], n[4]] for n in X_data]) # the input data
-y = torch.tensor([n[0] for n in y_data]) # the target
-X = X[:len(y_data)] # this is to ensure that the size of X matches y
+data = cursor.execute("SELECT * FROM vehicle_locations WHERE delay IS NOT NULL;").fetchall()
 
-X_train, X_test = X[:(X.size(0) // 2)], X[(X.size(0) // 2)+1:]
-y_train, y_test = y[:len(y_data) // 2], y[(len(y_data) // 2)+1:]
+X_data = []
+for n in data:
+    time = math.sin(n[2]/(21600/math.pi))
+    latitude = n[3]
+    longitude = n[4]
+    direction = float(n[5])
+    X_data.append([time, latitude, longitude, direction])
+
+X = torch.tensor(X_data, dtype=torch.float32) # the input data
+y = torch.tensor([n[6] for n in data], dtype=torch.float32) # the target
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 print(f'train sizes: {X_train.size(), y_train.size()}')
 print(f'test sizes: {X_test.size(), y_test.size()}')
 
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+X_train_scaled[:, :3] = torch.tensor(scaler.fit_transform(X_train[:, :3]))
+X_test_scaled[:, :3] = torch.tensor(scaler.transform(X_test[:, :3]))
+
 model = nn.Sequential(
-    nn.Linear(3, 10),
+    nn.Linear(4, 32),
     nn.ReLU(),
-    nn.Linear(10, 1)
+    nn.Linear(32, 32),
+    nn.ReLU(),
+    nn.Linear(32, 16),
+    nn.ReLU(),
+    nn.Linear(16, 1)
 )
 print('Started learning...')
 net = NeuralNet(
     module=model,
     criterion=nn.MSELoss,
-    optimizer=optim.SGD,
-    lr=0.01,
-    max_epochs=1000,
-    batch_size=1,
+    optimizer=optim.Adam,
+    lr=0.001,
+    max_epochs=3000,
+    batch_size=32,
     train_split=None
 )
 
-net.fit(X_train, y_train)
+net.fit(X_train_scaled.astype(np.float32), y_train.view(-1, 1))
 
 losses = net.history[:, 'train_loss']
+evaluations = []
 
 model.eval()
 with torch.no_grad():
-    X_test_tensor = torch.tensor(X_test)
-    y_test_tensor = torch.tensor(y_test)
+    X_test_tensor = torch.tensor(X_test_scaled, dtype=torch.float32)
 
     z_test = model(X_test_tensor)
 
+    acc = abs(z_test - y_test.view(-1, 1)).float().mean()
 
-    acc = abs(z_test - y_test_tensor).float().mean()
-
-print(f"\nAverage error: {acc.item()}")
+print(f"\nAverage error: {acc.item():.2f}")
+# print(f'Size of z: {z_test.size(0)}')
 
 plt.figure(figsize=(8, 4))
 plt.plot(losses, color='blue', linewidth=2)
@@ -67,14 +86,21 @@ fig, axes = plt.subplots(2, 5, figsize=(15, 6))
 fig.suptitle("Test Set Predictions (10 Samples)", fontsize=16, y=1.05)
 axes = axes.flatten()
 
-sample_X = torch.tensor(X_test[:100])
-sample_y_true = y_test[:100]
+sample_y_true = y_test.view(-1, 1)
+print(f'test size = {y_test.size(0)}')
 
-for x in range(100):
+correct = 0
+wrong = 0
+for x in range(0, sample_y_true.size(0)-1, 10):
     print(f'Batch {x}:')
-    print(f'Test result: {sample_X[x]}, correct: {sample_y_true[x]}')
-    if abs(z_test - sample_y_true) < 20:
+    predicted_val = z_test[x].item()
+    true_val = sample_y_true[x].item()
+    print(f'Test result: {predicted_val}, correct: {true_val}')
+
+    if abs(predicted_val - true_val) < 20:
         print(colored('Correct!', 'green'))
+        correct += 1
     else:
         print(colored('Wrong prediction!', 'red'))
-    
+        wrong += 1
+print(f'Correct: {(correct / (correct + wrong))*100}%')

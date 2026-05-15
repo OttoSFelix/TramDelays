@@ -6,10 +6,10 @@ import sqlite3
 MQTT_HOST = "mqtt.hsl.fi"
 MQTT_PORT = 8883
 # /<prefix>/<version>/<journey_type>/<temporal_type>/<event_type>/<transport_mode>/<operator_id>/<vehicle_number>/<route_id>/<direction_id>/<headsign>/<start_time>/<next_stop>/<geohash_level>/<geohash>/<sid>/#
-MQTT_TOPIC = "/hfp/v2/journey/+/+/+/+/01416/1056/#"
+MQTT_TOPIC = "/hfp/v2/journey/+/+/+/+/01431/1056/#"
 DATATYPES = ['VP', 'ARS', 'PAS']
 VEHICLES = set()
-db_conn = sqlite3.connect('tram_data.db', check_same_thread=False)
+db_conn = sqlite3.connect('bus_data.db', check_same_thread=False)
 cursor = db_conn.cursor()
 
 cursor.execute('''
@@ -18,7 +18,9 @@ cursor.execute('''
         datatype TEXT,
         time REAL,
         latitude REAL,
-        longitude REAL
+        longitude REAL,
+        direction TEXT,
+        delay REAL
     )
 ''')
 db_conn.commit()
@@ -55,11 +57,17 @@ def on_message(client, userdata, msg):
             time = parse_time(data[datatype]['tst'])
             latitude = data[datatype].get('lat', 0)
             longitude = data[datatype].get('long', 0)
-            payload = {'datatype': datatype, 'time': time, 'latitude': latitude, 'longitude': longitude}
+            direction = data[datatype].get('dir', 0)
+            delay = data[datatype].get('dl', 0)
+            if direction == 2:
+                direction = 1.0
+            else:
+                direction = 0.0
+            payload = {'datatype': datatype, 'time': time, 'latitude': latitude, 'longitude': longitude, 'direction': direction, 'delay': delay}
             cursor.execute('''
-                INSERT INTO vehicle_locations (datatype, time, latitude, longitude)
-                VALUES (?, ?, ?, ?)
-            ''', (payload['datatype'], payload['time'], payload['latitude'], payload['longitude']))
+                INSERT INTO vehicle_locations (datatype, time, latitude, longitude, direction, delay)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (payload['datatype'], payload['time'], payload['latitude'], payload['longitude'], payload['direction'], payload['delay']))
             db_conn.commit()
     except json.JSONDecodeError:
         print("Failed to decode JSON")

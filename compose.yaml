@@ -4,7 +4,7 @@ services:
       container_name: scraper
       build: .
       volumes:
-        - ./data_scraping/tram_data.db:/app/tram_data.db
+        - ./data_scraping/bus_data.db:/app/bus_data.db
     # trainer:
     #   image: nn_trainer
     #   container_name: trainer
