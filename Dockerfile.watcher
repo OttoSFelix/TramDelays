@@ -1,0 +1,11 @@
+FROM python:alpine3.23
+
+WORKDIR /app
+
+RUN apk add --no-cache docker-cli docker-cli-compose
+
+COPY ./data_scraping/watcher.py ./data_scraping/bus_data.db requirements_data.txt .
+
+RUN pip install -r requirements_data.txt
+
+ENTRYPOINT ["python3", "watcher.py"]
